@@ -1,0 +1,405 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+int findFirstChar(char chr[], int n){
+    for(int i = 0; i<n; i++){
+        if(isspace(chr[i]) == 0){return i;}
+    }
+    printf("the line is empty"); return 0;
+}
+
+int checkForColumn(char line[], int n){
+    for(int i = 0; i<n; i++){
+        if(i==n-1){
+            return 0;
+        }else if(line[i]== ';'){
+            return 1;
+        }else if(line[i]=='/' && line[i+1] == '/'){
+            return 0;
+        }
+    }
+    return 0;
+}
+
+int checkForEqualSign(char line[], int n){
+    for(int i = 0; i<n; i++){
+        if(i==n-1){
+            return 0;
+        }else if(line[i]== '='){
+            return 1;
+        }else if(line[i]=='/' && line[i+1] == '/'){
+            return 0;
+        }
+    }
+    return 0;
+}
+
+
+//convert A commands
+void convertToBinary(int dec, int binary[]){
+    int currentDec = dec; int count = 0;
+    while(currentDec>0){
+        binary[15-count] = currentDec%2;
+        currentDec = currentDec/2;
+        count++;
+    }
+    for(int i = 0; i<(16-count); i++){
+        binary[i] = 0;
+    }
+}
+
+void convertDecimalToBinary(char chr[], int position, int n, char charBinary[]){
+    int count = 0;
+    int currentPosition = position;
+    while(isdigit(chr[currentPosition+1]) != 0){
+        count++; currentPosition++;
+    }
+    int decimal = 0;
+    if(count == 0){
+        char c = chr[position]; int ic = c - '0';
+        decimal = ic;
+    }else{
+        for(int i = 0; i<=count; i++){
+            char c = chr[position+i]; int ic = c - '0';
+            decimal += (count-i)*ic;
+        }
+    }
+    int binary[16];
+    convertToBinary(decimal, binary);
+    for(int i = 0; i<16; i++){
+        charBinary[i] = binary[i] + '0';
+    }
+}
+
+//convert C command
+
+void convertSymbolToBinary(char chr[], int position, int n, char charBinary[]){}
+
+//convert commands functions
+
+void convert_a_command(char chr[], int n, char binary[]){
+    int i = 0;
+    if(chr[0] != '@'){
+        i = findFirstChar(chr, n);
+
+    }
+    if(isdigit(chr[i+1]) != 0){
+        convertDecimalToBinary(chr, i+1, n, binary);
+    }else{
+        convertSymbolToBinary(chr, i+1, n, binary);
+    }
+}
+
+void fill(char binary[], char numbers[]){
+    for(int i = 0; i<6; i++){
+        binary[i] = numbers[i];
+    }
+}
+
+//dest=comp;jump => c_instruction
+void convert_comp(char comp[], int n, char binary[]){
+    if(n == 1){
+        if(comp[0] == '0'){                         //0
+            char numbers[] = {'1', '0', '1', '0', '1', '0'};
+             fill(binary, numbers);
+        }
+        else if(comp[0] == '1'){                    //1
+            char numbers[6] = {'1', '1', '1', '1', '1', '1'};
+            fill(binary, numbers);
+        }
+        else if(comp[0] == 'A' || comp[0] == 'M'){  //A || M
+            char numbers[6] = {'1', '1', '0', '0', '0', '0'};
+            fill(binary, numbers);
+        }
+        else if(comp[0] == 'D'){                    //D
+            char numbers[6] = {'0', '0', '1', '1', '0', '0'};
+            fill(binary, numbers);
+        }
+    }else if(n == 2){
+        if(comp[0] == '!'){
+            if(comp[1] == 'D'){                     //!D
+                char numbers[6] = {'0', '0', '1', '1', '0', '1'};
+                fill(binary, numbers);
+            }
+            else{                                   //!A || !M
+                char numbers[6] = {'1', '1', '0', '0', '0', '1'};
+                fill(binary, numbers);
+            }
+        }
+        else if(comp[0] == '-'){
+            if(comp[1] == '1'){                     //-1
+                char numbers[6] = {'1', '1', '1', '0', '1', '0'};
+                fill(binary, numbers);
+            }
+            else if(comp[1] == 'D'){                //-D
+                char numbers[6] = {'0', '0', '1', '1', '1', '1'};
+                fill(binary, numbers);
+            }
+            else{                                   //-A || -M
+                char numbers[6] = {'1', '1', '0', '0', '1', '1'};
+                fill(binary, numbers);
+            }
+        }
+    }else{
+        if(comp[0] == 'D'){
+            if(comp[1] == '+'){
+                if(comp[2] == '1'){                 //D+1
+                    char numbers[6] = {'0', '1', '1', '1', '1', '1'};
+                    fill(binary, numbers);
+                }
+                else{                               //D+A || D+M
+                    char numbers[6] = {'0', '0', '0', '0', '1', '0'};
+                    fill(binary, numbers);
+                }
+            }
+            else if(comp[1] == '-'){
+                if(comp[2] == '1'){                 //D-1
+                    char numbers[6] = {'0', '0', '1', '1', '1', '0'};
+                    fill(binary, numbers);
+                }
+                else{                               //D-A || D-M 0 1 0 0 1 1
+                    char numbers[6] = {'0', '1', '0', '0', '1', '1'};
+                    fill(binary, numbers);
+                }
+            }
+            else if(comp[1] == '&'){                //D&A || D&M
+                char numbers[6] = {'0', '0', '0', '0', '0', '0'};
+                fill(binary, numbers);
+            }
+            else{                                   //D|A || D|M
+                char numbers[6] = {'0', '1', '0', '1', '0', '1'};
+                fill(binary, numbers);
+            }
+        }
+        else if(comp[0] == 'A' || comp[0] == 'M'){
+            if(comp[1] == '+'){                    //A+1 || M+1
+                char numbers[6] = {'1', '1', '0', '1', '1', '1'};
+                fill(binary, numbers);
+            }
+            else{
+                if(comp[2] == '1'){                //A-1 || M-1
+                    char numbers[6] = {'1', '1', '0', '0', '1', '0'};
+                    fill(binary, numbers);
+                }
+                else{                              //A-D
+                    char numbers[6] = {'0', '0', '0', '1', '1', '1'};
+                    fill(binary, numbers);
+                }
+            }
+        }
+    }
+}
+
+void fill_comp_part_of_binary(char binary[], char binary_comp[]){
+    for(int i = 0; i<6; i++){
+        binary[4+i] = binary_comp[i];
+    }
+}
+
+int is_in(char comp[], int n, char chr){
+    for(int i = 0; i<n; i++){
+        if(comp[i] == chr){return 1;}
+    }
+    return 0;
+}
+
+char symbols[6] = {'!', '-', '+', '&', '|', '1'};
+
+int is_in_symbols(char chr){
+    for(int i = 0; i<6; i++){
+        if(symbols[i] == chr){return 1;}
+    }
+    return 0;
+}
+
+void convert_jump_command(char chr[], int n, int start_index, char binary[]){
+    if(chr[start_index] == 'n'){
+        binary[13] = '0'; binary[14] = '0'; binary[15] = '0';
+    }else{
+        if(chr[start_index+1] == 'G' || chr[start_index+1] == 'E'){
+            binary[13] = '0';
+            if(chr[start_index+1] == 'G'){
+                binary[15] = '1';
+                if(chr[start_index+2] == 'T'){
+                    binary[14] = '0';
+                }else{
+                    binary[14] = '1';
+                }
+            }else{
+                binary[14] = '1'; binary[13] = '0';
+            }
+        }else{
+            binary[13] = '1';
+            if(chr[start_index+1] == 'L'){
+                binary[15] = '0';
+                if(chr[start_index+2] == 'T'){
+                    binary[14] = '0';
+                }else{
+                    binary[14] = '1';
+                }
+            }else{
+                binary[15] = '1';
+                if(chr[start_index+1] == 'N'){
+                    binary[13] = '1'; binary[14] = '0';
+                }else{
+                    binary[13] = '1'; binary[14] = '1';
+                }
+            }
+        }
+    }
+}
+void convert_dest_command(char chr[], int first_char, char binary[]){
+    char dest[3]; int size_dest = 0;
+    int i = first_char;
+    while(chr[i] != '=' && isalpha(chr[i]) != 0){
+        dest[i-first_char] = chr[i];
+        i++; size_dest++;
+    }
+    if(dest[0] == 'A'){
+        if(size_dest == 1){
+            binary[10] = '1'; binary[11] = '0'; binary[12] = '0';
+        }else if(size_dest == 2){
+            if(dest[1] == 'M'){
+                binary[10] = '1'; binary[11] = '0'; binary[12] = '1';
+            }else{
+                binary[10] = '1'; binary[11] = '1'; binary[12] = '0';
+            }
+        }else{
+            binary[10] = '1'; binary[11] = '1'; binary[12] = '1';
+        }
+    }else{
+        if(size_dest == 1){
+            if(dest[0] == 'M'){
+                binary[10] = '0'; binary[11] = '0'; binary[12] = '1';
+            }else{
+                binary[10] = '0'; binary[11] = '1'; binary[12] = '0';
+            }
+        }else{
+            binary[10] = '0'; binary[11] = '1'; binary[12] = '1';
+        }
+    }
+}
+
+int convert_c_command(char chr[], int n, char binary[]){
+    int first_char = findFirstChar(chr, n); //find the first character on the line(ignoring white space)
+    char comp[3]; int size_comp = 0; int first_comp_index; //size of comp command and the index of the first comp command letter
+    if(checkForEqualSign(chr, n)==0){      //check if dest is empty by checking if no "=" -> 1 means = is present
+        int i = first_char; int comp_index = 0;
+        while(chr[i] != ';'){
+            comp[comp_index] = chr[i];
+            comp_index++; i++;
+            size_comp++;
+        }
+        convert_jump_command(chr, n, i+1, binary);
+        binary[10] = '0'; binary[11] = '0'; binary[12] = '0';
+    }else if(checkForColumn(chr, n)==0){   //check if jump is empty by checking if no ";"
+        int i = first_char;
+        while(chr[i] != '='){
+            i++;
+        }
+        first_comp_index = i+1; int comp_index = 0;
+        while(isalpha(chr[first_comp_index]) != 0 || is_in_symbols(chr[first_comp_index]) == 1){
+            comp[comp_index] = chr[first_comp_index];
+            first_comp_index++; comp_index++;
+            size_comp++;
+        }
+        convert_dest_command(chr, first_char, binary);
+        binary[13] = '0'; binary[14] = '0'; binary[15] = '0';
+
+    }else{//normal c-instruction
+        int i = first_char;
+        while(chr[i] != '='){
+            i++;
+        }
+        first_comp_index = i+1; int comp_index = 0;
+        while(chr[first_comp_index] != ';'){
+            comp[comp_index] = chr[first_comp_index];
+            first_comp_index++;
+            comp_index++;
+            size_comp++;
+        }
+    }
+    binary[0] = '1';
+    binary[1] = '1';
+    binary[2] = '1';
+    if(is_in(comp, 3, 'M')==1){//check if a(binary[3]) is 1 or 0 by checking if comp has an M or not
+        binary[3] = '1';
+    }else{
+        binary[3] = '0';
+    }
+    char binary_comp[6];
+    convert_comp(comp, size_comp, binary_comp);
+    fill_comp_part_of_binary(binary, binary_comp);
+    printf("BINARY CURRENTLY: \n");
+    for(int i = 0; i<16; i++){
+        printf(" %c ", binary[i]);
+    }
+    printf("\n");
+    return 0;
+}
+
+int convert_l_command(char chr[], int n, char binary[]){}
+
+enum command{A_COMMAND, C_COMMAND, L_COMMAND};
+
+enum command commandType(char line[], int n){
+    int i = 0;
+    while(isspace(line[i]) != 0){
+        i++;
+    }
+    char two[2];
+    two[0] = line[i]; two[1] = line[i+1];
+
+    if(line[i]=='@'){
+        return A_COMMAND;
+    }else if(checkForEqualSign(line, n)==1){
+        return C_COMMAND;
+    }else{
+        return L_COMMAND;
+    }
+}
+
+void parse(FILE *in, FILE *out){
+    char binary[17];
+    binary[16] = '\0';
+    char chr[100];
+    while(fgets(chr, 100, in)!=NULL){
+        printf("%s", chr);
+        int l = strlen(chr);
+        if(l>1 && (chr[0] != '/' && chr[1] != '/')){
+            enum command currentCommand = commandType(chr, l);
+            if(currentCommand == A_COMMAND){
+                convert_a_command(chr, l, binary);
+            }else if(currentCommand == C_COMMAND){
+                convert_c_command(chr, l, binary);
+            }else{
+                convert_l_command(chr, l, binary);
+            }
+        }
+    }
+    fclose(in);
+    fclose(out);
+}
+
+int main(){
+    FILE *file;
+    FILE *out;
+
+
+    out = fopen("parsed_file_two", "w");
+    if(out == NULL){
+        printf("out cannot be opened\n");
+        perror("Reason");
+        return 0;
+    }
+    file = fopen("add.txt", "r");
+
+    if(file == NULL){
+        printf("file cannot be opended\n");
+        return 0;
+    }
+    parse(file, out);
+
+    return 0;
+}
