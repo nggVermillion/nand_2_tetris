@@ -5,10 +5,31 @@ class_symbol_table = {}
 subroutine_symbol_table = {}
 
 
+def find_name_index(token):
+    global class_symbol_table
+    global subroutine_symbol_table
+    if token not in class_symbol_table and token not in subroutine_symbol_table:
+        print(f"No valid key in class symbol table for {token}")
+        return
+    else:
+        if token in class_symbol_table:
+            return f"push this {class_symbol_table[token][2] - 1}"
+        else:
+            return f"push local {subroutine_symbol_table[token][2] - 1}"
+
+
+def reset_all_globals():
+    global class_symbol_table
+    global subroutine_symbol_table
+    class_symbol_table = {}
+    subroutine_symbol_table = {}
+
+
 def count_subroutine_table_vars():
-    cnt = -1
-    for vars in subroutine_symbol_table:
-        cnt += 1
+    cnt = 0
+    for key, value in subroutine_symbol_table.items():
+        if value[1] == "var":
+            cnt += 1
     return cnt
 
 
@@ -67,7 +88,7 @@ def count_field_var():
     for k, v in class_symbol_table.items():
         if v[1] == "field":
             count += 1
-    return count - 1
+    return count
 
 
 def determine_class_or_subroutine(list_tokenized, index):
@@ -159,9 +180,9 @@ def compile_class(list_tokenized, index, output_file, level):
 
 def compile_class_var_dec(list_tokenized, index, output_file, level):
     current_kind = next_token(list_tokenized, index)
-    index_plus_one = [index[0] + 1]
-    current_type = next_token(list_tokenized, index_plus_one)
-    current_level = level + 2
+    increase_index(index)
+    current_type = next_token(list_tokenized, index)
+    increase_index(index)
     while next_token(list_tokenized, index) != ";":
         if next_lexical_element(list_tokenized, index) == "identifier":
             add_identifier_to_class_symbol_table(current_kind, current_type, next_token(list_tokenized, index))
@@ -181,8 +202,11 @@ def compile_subroutine_body(list_tokenized, index, output_file, level, subroutin
     code_write(expression, output_file)
     if subroutine_type == "constructor":
         space_required = str(count_field_var())
-        code_write("push " + space_required, output_file)
+        code_write("push constant " + space_required, output_file)
         code_write("call Memory.alloc 1", output_file)
+        code_write("pop pointer 0", output_file)
+    elif subroutine_type == "method":
+        code_write("push argument 0", output_file)
         code_write("pop pointer 0", output_file)
     compile_statements(list_tokenized, index, output_file, current_level, subroutine_name)
     increase_index(index)
@@ -226,31 +250,35 @@ def compile_var_dec(list_tokenized, index, output_file, level):
     while next_token(list_tokenized, index) != ";":
         if next_lexical_element(list_tokenized, index) == "identifier":
             add_identifier_to_subroutine_symbol_table(current_kind, current_type, next_token(list_tokenized, index))
-            print(subroutine_symbol_table)
             increase_index(index)
         else:
             increase_index(index)
     increase_index(index)
     if next_token(list_tokenized, index) == "var":
         compile_var_dec(list_tokenized, index, output_file, level)
+cond_index = {
+    "WHILE_INDEX": 0,
+    "IF_INDEX": 0,
+}
 
-
-def determine_statement_type(list_tokenized, index, output_file, level, subroutine_name, cond_index):
+def determine_statement_type(list_tokenized, index, output_file, level, subroutine_name):
+    global cond_index
     statement = list_tokenized[index[0]][1]
-    print(f"statement: {statement}")
     sub_name = subroutine_symbol_table["this"][0] + "." + subroutine_name
     if statement == "let":
         compile_let(list_tokenized, index, output_file)
     elif statement == "if":
         label_name_start = sub_name + ".if.start." + str(cond_index["IF_INDEX"])
         label_name_end = sub_name + ".if.end." + str(cond_index["IF_INDEX"])
-        compile_if(list_tokenized, index, output_file, level, subroutine_name, label_name_start, label_name_end)
         cond_index["IF_INDEX"] += 1
+        compile_if(list_tokenized, index, output_file, level, subroutine_name, label_name_start, label_name_end)
     elif statement == "while":
+        print(cond_index["WHILE_INDEX"])
         label_name_start = sub_name + ".while.start." + str(cond_index["WHILE_INDEX"])
         label_name_end = sub_name + ".while.end." + str(cond_index["WHILE_INDEX"])
-        compile_while(list_tokenized, index, output_file, level, subroutine_name, label_name_start, label_name_end)
         cond_index["WHILE_INDEX"] += 1
+        print(cond_index["WHILE_INDEX"])
+        compile_while(list_tokenized, index, output_file, level, subroutine_name, label_name_start, label_name_end)
     elif statement == "do":
         compile_do(list_tokenized, index, output_file, level)
     else:
@@ -260,13 +288,8 @@ def determine_statement_type(list_tokenized, index, output_file, level, subrouti
 def compile_statements(list_tokenized, index, output_file, level, subroutine_name):
     current_level = level + 2
     # output_file.write(level * " " + "<statements>\n")
-    cond_index = {
-        "WHILE_INDEX": 0,
-        "IF_INDEX": 0,
-    }
     while list_tokenized[index[0]][1] != "}":
-        print(f"were are inside compile_statemnts: {next_token(list_tokenized, index)}")
-        determine_statement_type(list_tokenized, index, output_file, current_level, subroutine_name, cond_index)
+        determine_statement_type(list_tokenized, index, output_file, current_level, subroutine_name)
     # output_file.write(level * " " + "</statements>\n")
 
 
@@ -274,22 +297,36 @@ def compile_do(list_tokenized, index, output_file, level):
     current_level = level + 2
     increase_index(index)  # do
     token = next_token(list_tokenized, index)
+    global subroutine_symbol_table
+    global class_symbol_table
+    token_type = ""
     increase_index(index)
     if next_token(list_tokenized, index) == "(":
+        code_write("push pointer 0", output_file)
         increase_index(index)
-        amt = compile_expression_list(list_tokenized, index, output_file, current_level)
-        expression = f"call {token} {amt}"
+        amt = compile_expression_list(list_tokenized, index, output_file, current_level) + 1
+        expression = f"call {subroutine_symbol_table['this'][0]}.{token} {amt}"
         code_write(expression, output_file)
         increase_index(index)  # )
     elif next_token(list_tokenized, index) == ".":
+        name = token
         for x in range(0, 2):
             token += next_token(list_tokenized, index)
             increase_index(index)
+        token_type = token
         increase_index(index)  # (
         amt = compile_expression_list(list_tokenized, index, output_file, current_level)
-        expression = f"call {token} {amt}"
+        if token[0].islower():
+            token_type = subroutine_symbol_table[name][0] if name in subroutine_symbol_table else \
+                class_symbol_table[name][0]
+            token_type += token[token.find("."):]
+            expression = find_name_index(name)
+            code_write(expression, output_file)
+            amt += 1
+        expression = f"call {token_type} {amt}"
         code_write(expression, output_file)
         increase_index(index)  # )
+    code_write("pop temp 0", output_file)
     increase_index(index)  # ;
 
 
@@ -313,9 +350,9 @@ def compile_let(list_tokenized, index, output_file):
     token = next_token(list_tokenized, index)
     increase_index(index)
     if next_token(list_tokenized, index) == "[":
-        write_segments("push", token, output_file)
         increase_index(index)  # [
         compile_expression(list_tokenized, index, output_file)
+        write_segments("push", token, output_file)
         code_write("add", output_file)
         increase_index(index)  # ]
         increase_index(index)  # =
@@ -371,17 +408,25 @@ def compile_if(list_tokenized, index, output_file, level, subroutine_name, label
     increase_index(index)  # if
     increase_index(index)  # (
     compile_expression(list_tokenized, index, output_file)
-    code_write("neg", output_file)
-    code_write("if-goto " + label_start, output_file)
-    increase_index(index)  # )
-    increase_index(index)  # {
-    compile_statements(list_tokenized, index, output_file, current_level, subroutine_name)
-    code_write("goto " + label_end, output_file)
+    code_write(f"if-goto {label_start}", output_file)
+    code_write(f"goto {label_end}", output_file)
+    code_write(f"label {label_start}", output_file)
     increase_index(index)
-    code_write("label " + label_start, output_file)
+    increase_index(index)
+    compile_statements(list_tokenized, index, output_file, current_level, subroutine_name)
+    code_write(f"label {label_end}", output_file)
+    increase_index(index)
+    # code_write("neg", output_file)
+    # code_write("if-goto " + label_start, output_file)
+    # increase_index(index)  # )
+    # increase_index(index)  # {
+    # compile_statements(list_tokenized, index, output_file, current_level, subroutine_name)
+    # code_write("goto " + label_end, output_file)
+    # increase_index(index)
+    # code_write("label " + label_start, output_file)
     if next_token(list_tokenized, index) == "else":
         compile_else(list_tokenized, index, output_file, current_level, subroutine_name)
-    code_write("label " + label_end, output_file)
+    # code_write("label " + label_end, output_file)
 
 
 def compile_expression(list_tokenized, index, output_file):
@@ -411,8 +456,8 @@ def compile_keyword(list_tokenized, index, output_file):
     elif token == "false":
         code_write("push constant 0", output_file)
     elif token == "true":
-        code_write("push constant 1", output_file)
-        code_write("neg", output_file)
+        code_write("push constant 0", output_file)
+        code_write("not", output_file)
     elif token == "this":
         code_write("push pointer 0", output_file)
     else:
@@ -422,31 +467,45 @@ def compile_keyword(list_tokenized, index, output_file):
 
 
 def compile_identifier(list_tokenized, index, output_file):
+    global subroutine_symbol_table;
+    global class_symbol_table
     # varName | varName '[' expression ']' | subroutineCall
     token = next_token(list_tokenized, index)
     increase_index(index)
     if next_token(list_tokenized, index) == "[":  # varName '[' expression ']'
         increase_index(index)  # [
-        write_segments("push", token, output_file)
         compile_expression(list_tokenized, index, output_file)
+        write_segments("push", token, output_file)
         code_write("add", output_file)
         code_write("pop pointer 1", output_file)
         code_write("push that 0", output_file)
         increase_index(index)  # ]
     elif next_token(list_tokenized, index) == "(":  # subroutineName(expression)
-        expression = "call " + token
+        code_write("push pointer 0", output_file)
+        expression = f"call {subroutine_symbol_table['this'][0]}.{token}"
         increase_index(index)  # (
-        compile_expression_list(list_tokenized, index, output_file, 0)
+        amt = compile_expression_list(list_tokenized, index, output_file, 0) + 1
+        expression += f" {amt}"
         code_write(expression, output_file)  # das muss call f sii
         increase_index(index)  # )
     elif next_token(list_tokenized, index) == ".":  # (className|varName).subroutineName(expressionList)
+        name = token
+        token_type = ""
         for i in range(0, 2):
             token += next_token(list_tokenized, index)
             increase_index(index)
+        token_type = token
         increase_index(index)  # (
-        expression = "call " + token
+        expression = "call " + token_type
         amt = compile_expression_list(list_tokenized, index, output_file, 0)
-        expression += f" {amt}"
+        if token[0].islower():
+            token_type = subroutine_symbol_table[name][0] if name in subroutine_symbol_table else \
+                class_symbol_table[name][0]
+            token_type += token[token.find("."):]
+            expression = find_name_index(name)
+            code_write(expression, output_file)
+            amt += 1
+        expression = f"call {token_type} {amt}"
         code_write(expression, output_file)
         increase_index(index)  # )
     else:  # varName
@@ -526,14 +585,12 @@ def compile_term(list_tokenized, index, output_file):
     else:  # | unaryOp term
         compile_unaryOp_term(list_tokenized, index, output_file)
     if next_token(list_tokenized, index) in operations:
-        print(next_token(list_tokenized, index))
-        print("THAT WAS OPERATOR BABYY")
         compile_operation_term(list_tokenized, index, output_file)
 
 
 def compile_expression_list(list_tokenized, index, output_file, level):
     if next_token(list_tokenized, index) == ")":
-        return
+        return 0
     current_level = level + 2
     count = 1
     compile_expression(list_tokenized, index, output_file)
@@ -544,11 +601,9 @@ def compile_expression_list(list_tokenized, index, output_file, level):
     return count
 
 
-def compile_tokens(list_tokenized):
-    print(list_tokenized)
+def compile_tokens(list_tokenized, output_file):
     i = [0]
     if list_tokenized[i[0]][1] == "class":
-        output_file = open(list_tokenized[i[0]][1] + ".xml", "w")
         compile_class(list_tokenized, i, output_file, 0)
     else:
         print("First element should be class\n")
@@ -676,19 +731,22 @@ def tokenize_file(file):
 
 
 def get_input():
-    path = input("Please enter the path of your file: ")
-    if os.path.isfile(path):
-        return open(path, "r")
+    path = input("Please enter the path to the folder of your files: ")
+    if os.path.isdir(path):
+        return path
     print("The given path does not exists.")
     return get_input()
 
 
 def main():
-    input_file = get_input()
-    list_tokenized = tokenize_file(input_file)  # format [["token_type", token], [...], ...]
-    # for item in list_tokenized:
-    #     print(item)
-    compile_tokens(list_tokenized)
+    folder_path = get_input()
+    jack_files = [file for file in os.listdir(folder_path) if file.endswith(".jack")]
+    for file in jack_files:
+        reset_all_globals()
+        f = open(f"{folder_path}/{file}", "r")
+        output_file = open(f"{folder_path}/{file[:file.find('.')]}.vm", "w")
+        list_tokenized = tokenize_file(f)
+        compile_tokens(list_tokenized, output_file)
 
 
 if __name__ == '__main__':
